@@ -21,7 +21,8 @@ $msg = new AMQPMessage('Hello World!');
 // 發布訊息
 $channel->basic_publish($msg, '', 'queue_name'); 
 // Here we use the default or nameless exchange: 
-// messages are routed to the queue with the name specified by 'routing_key', if it exists. The 'routing_key' is the third argument to basic_publish
+// messages are routed to the queue with the name specified by 'routing_key', if it exists. 
+// The 'routing_key' is the third argument to basic_publish
 ```
 
 consumer: 處理queue中的訊息, [receive.php](https://github.com/rabbitmq/rabbitmq-tutorials/blob/master/php/receive.php)
@@ -59,29 +60,41 @@ $msg = new AMQPMessage(
 ### Fair dispatch
 盡量平均分配訊息, 設定 prefetch_count=1 表示等consumer裡的訊息處理完並回傳ack後，才會dispatch新的訊息給這個consumer處理
 ```php
-// we can use the basic_qos method with the prefetch_count = 1 setting. This tells RabbitMQ not to give more than one message to a worker at a time.
+// we can use the basic_qos method with the prefetch_count = 1 setting. 
+// This tells RabbitMQ not to give more than one message to a worker at a time.
 $channel->basic_qos(null, 1, null);
 ```
 
 
-### Exchanges
-在producer跟queue中間，有點像route的功能。exchange type決定了訊息要傳送到哪個queue
- - direct
- - topic
- - headers
- - fanout
- 
-```php
-// 宣告一個 fanout exchange: it just broadcasts all the messages it receives to all the queues it knows.
-$channel->exchange_declare('exchange_name', 'fanout', false, false, false);
-$channel->basic_publish($msg, 'exchange_name');
-```
-### Bindings
+### Exchanges & Bindings
 把 exchange 跟 queue 建立關係
 ```php
-// Now we need to tell the exchange to send messages to our queue. That relationship between exchange and a queue is called a binding.
+// Now we need to tell the exchange to send messages to our queue. 
+// That relationship between exchange and a queue is called a binding.
 $channel->queue_bind($queue_name, 'exchange_name');
 ```
+
+* exchange type: fanout, direct, topic, headers
+#### fanout
+it just broadcasts all the messages it receives to all the queues it knows.
+```php
+// emit.php
+$channel->exchange_declare('exchange_name', 'fanout', false, false, false);
+$channel->basic_publish($msg, 'exchange_name');
+// receive.php
+$channel->queue_bind($queue_name, 'exchange_name');
+```
+#### direct
+a message goes to the queues whose binding key exactly matches the routing key of the message.
+```php
+// emit.php
+$channel->exchange_declare('direct_logs', 'direct', false, false, false);
+$channel->basic_publish($msg, 'direct_logs', $routing_key);
+// receive.php
+$channel->queue_bind($queue_name, 'direct_logs', $binding_key);
+```
+
+
 
 ## keywords
 
