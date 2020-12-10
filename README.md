@@ -1,7 +1,7 @@
 # RabbitMQ-note
-`ref: https://www.rabbitmq.com/tutorials/tutorial-one-php.html`
+> ref: https://www.rabbitmq.com/tutorials/tutorial-one-php.html
 
-> producer ->  queue  -> consumer
+`producer ->  queue  -> consumer`
 
 - A producer is a user application that sends messages.
 - A queue is a buffer that stores messages.
@@ -76,7 +76,7 @@ $channel->queue_bind($queue_name, 'exchange_name');
 
 * exchange type: fanout, direct, topic, headers
 #### fanout
-it just broadcasts all the messages it receives to all the queues it knows.
+It just broadcasts all the messages it receives to all the queues it knows.
 ```php
 // emit.php
 $channel->exchange_declare('exchange_name', 'fanout', false, false, false);
@@ -85,13 +85,73 @@ $channel->basic_publish($msg, 'exchange_name');
 $channel->queue_bind($queue_name, 'exchange_name');
 ```
 #### direct
-a message goes to the queues whose binding key exactly matches the routing key of the message.
+A message goes to the queues whose binding key exactly matches the routing key of the message.
 ```php
 // emit.php
 $channel->exchange_declare('direct_logs', 'direct', false, false, false);
 $channel->basic_publish($msg, 'direct_logs', $routing_key);
 // receive.php
 $channel->queue_bind($queue_name, 'direct_logs', $binding_key);
+```
+#### topic
+Messages sent to a topic exchange can't have an arbitrary routing_key - it must be a list of words, delimited by dots.
+```
+* (star) can substitute for exactly one word.
+# (hash) can substitute for zero or more words.
+```
+> Topic exchange is powerful and can behave like other exchanges.
+
+When a queue is bound with "#"(hash) binding key - it will receive all the messages, regardless of the routing key - like in fanout exchange.
+When special characters "\*"(star) and "#"(hash) aren't used in bindings, the topic exchange will behave just like a direct one.
+[see tutorial](https://www.rabbitmq.com/tutorials/tutorial-five-php.html)
+
+
+
+### RPC (Remote procedure call)
+```
+producer ->  queue  -> consumer
+↑(client)              ↓(server)
+         <-  queue  <-  
+```
+需要另外的參數讓訊息返回client
+
+#### Message properties
+```
+delivery_mode: Marks a message as persistent (with a value of 2) or transient (1). You may remember this property from the second tutorial.
+content_type: Used to describe the mime-type of the encoding. For example for the often used JSON encoding it is a good practice to set this property to: application/json.
+reply_to: Commonly used to name a callback queue.
+correlation_id: Useful to correlate RPC responses with requests.
+```
+[rpc_client.php](https://github.com/rabbitmq/rabbitmq-tutorials/blob/master/php/rpc_client.php)
+```php
+$msg = new AMQPMessage(
+    (string) $n,
+    array(
+        'correlation_id' => $this->corr_id,
+        'reply_to' => $this->callback_queue
+    )
+);
+```
+[rpc_server.php](https://github.com/rabbitmq/rabbitmq-tutorials/blob/master/php/rpc_server.php)
+```php
+$callback = function ($req) {
+    $n = intval($req->body);
+    echo ' [.] fib(', $n, ")\n";
+
+    $msg = new AMQPMessage(
+        (string) fib($n),
+        array('correlation_id' => $req->get('correlation_id'))
+    );
+
+    $req->delivery_info['channel']->basic_publish(
+        $msg,
+        '',
+        $req->get('reply_to')
+    );
+    $req->delivery_info['channel']->basic_ack(
+        $req->delivery_info['delivery_tag']
+    );
+};
 ```
 
 
