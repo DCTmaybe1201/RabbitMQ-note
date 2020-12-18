@@ -116,21 +116,28 @@ producer ->  queue  -> consumer
 需要另外的參數讓訊息返回client
 
 #### Message properties
+建立訊息的時候可以帶入的常用參數
 ```
-delivery_mode: Marks a message as persistent (with a value of 2) or transient (1). You may remember this property from the second tutorial.
-content_type: Used to describe the mime-type of the encoding. For example for the often used JSON encoding it is a good practice to set this property to: application/json.
-reply_to: Commonly used to name a callback queue.
 correlation_id: Useful to correlate RPC responses with requests.
+delivery_mode:  Marks a message as persistent (with a value of 2) or transient (1). You may remember this property from the second tutorial.
+content_type:   Used to describe the mime-type of the encoding. For the often used JSON encoding it's a good practice to set this property to: application/json.
+reply_to:       Commonly used to name a callback queue.
+
 ```
 [rpc_client.php](https://github.com/rabbitmq/rabbitmq-tutorials/blob/master/php/rpc_client.php)
 ```php
+//  In order to receive a response we need to send a 'callback' queue address with the request.
+list($queue_name, ,) = $channel->queue_declare("", false, false, true, false);
+
 $msg = new AMQPMessage(
     (string) $n,
     array(
-        'correlation_id' => $this->corr_id,
-        'reply_to' => $this->callback_queue
+        'correlation_id' => $this->corr_id, // which is set to a unique value for every request
+        'reply_to' => $this->callback_queue // which is set to the callback queue
     )
 );
+
+$channel->basic_publish($msg, '', 'rpc_queue');
 ```
 [rpc_server.php](https://github.com/rabbitmq/rabbitmq-tutorials/blob/master/php/rpc_server.php)
 ```php
@@ -152,6 +159,14 @@ $callback = function ($req) {
         $req->delivery_info['delivery_tag']
     );
 };
+
+// We use basic_consume to access the queue.
+$channel->basic_consume('rpc_queue', '', false, false, false, false, $callback);
+
+// Then we enter the while loop in which we wait for request messages, do the work and send the response back.
+while ($channel->is_consuming()) {
+    $channel->wait();
+}
 ```
 
 
